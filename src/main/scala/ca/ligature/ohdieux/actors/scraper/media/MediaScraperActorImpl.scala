@@ -7,6 +7,7 @@ import ca.ligature.ohdieux.persistence.{
   EpisodeRepository
 }
 import scala.collection.immutable.HashSet
+import play.api.Logger
 
 private case class MediaScraperActorImpl(
     api: ApiClient,
@@ -24,6 +25,7 @@ private case class MediaScraperActorImpl(
         programmeId: Int
     ) => Unit
 ) {
+  var logger: Logger = Logger(this.getClass())
 
   def fetchEpisodeMedia(
       episode: RCModels.ProgrammeContentDetailItem,
@@ -37,22 +39,28 @@ private case class MediaScraperActorImpl(
           alreadySaved.map(_.upstream_url)
         )
       ) {
-        val mediaUrl = fetchMediaUrl(mediaId.toInt)
-        onNewMedia(
-          mediaId.toInt,
-          mediaUrl,
-          archiveBlacklist.contains(parentProgrammeId),
-          parentProgrammeId
-        )
-        mediaRepository.save(
-          MediaEntity(
-            id = mediaId.toInt,
-            episode_id = episode.playlistItemId.globalId2.id.toInt,
-            episode_index = i,
-            length = episode.duration.durationInSeconds,
-            upstream_url = mediaUrl
-          )
-        )
+        fetchMediaUrl(mediaId.toInt) match {
+          case Some(mediaUrl) =>
+            onNewMedia(
+              mediaId.toInt,
+              mediaUrl,
+              archiveBlacklist.contains(parentProgrammeId),
+              parentProgrammeId
+            )
+            mediaRepository.save(
+              MediaEntity(
+                id = mediaId.toInt,
+                episode_id = episode.playlistItemId.globalId2.id.toInt,
+                episode_index = i,
+                length = episode.duration.durationInSeconds,
+                upstream_url = mediaUrl
+              )
+            )
+          case None =>
+            logger.warn(
+              s"Could not fetch stream for media ${mediaId}, skipping"
+            )
+        }
       }
     }
   }
@@ -99,16 +107,18 @@ private case class MediaScraperActorImpl(
 
   }
 
-  private def fetchMediaUrl(mediaId: Int): String = {
-    TECHS
-      .flatMap(
-        api.getMedia(mediaId, _).opt
-      )
+  private def fetchMediaUrl(mediaId: Int): Option[String] = {
+    val result = TECHS
+      .flatMap(tech => {
+        val fetchResult = api.getMedia(mediaId, tech)
+        if (!fetchResult.isSuccess) {
+          logger.warn(s"getMedia(${mediaId}, ${tech}) failed: ${fetchResult}")
+        }
+        fetchResult.opt
+      })
       .map(_.url)
       .headOption
-      .getOrElse(
-        throw new Error(s"Could not fetch stream form media ${mediaId}")
-      )
+    result
   }
 
 }

@@ -1,0 +1,13 @@
+services:
+  ohdieux:
+    image: ohdieux:latest
+    container_name: ohdieux
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      PORT: "8081"
+      PUBLIC_URL: "${PUBLIC_URL}"
+      SCRAPER_REFRESH_INTERVAL: "${SCRAPER_REFRESH_INTERVAL}"
+    volumes:
+      - ./data:/data
