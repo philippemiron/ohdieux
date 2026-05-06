@@ -70,6 +70,7 @@ case class ApiClient(val baseUrl: String, val userAgent: String) {
       .get(uri"$baseUrl/bff/audio/graphql?$query")
       .header("User-Agent", userAgent)
       .header("Content-Type", "application/json")
+      .header("apollo-require-preflight", "true")
       .send()
 
     if (!response.code.isSuccess) {
@@ -81,7 +82,7 @@ case class ApiClient(val baseUrl: String, val userAgent: String) {
     val decoded =
       (body \ "data" \ "playbackListByGlobalId").validate[PlaybackListById]
 
-    decoded.map(Success(_)).getOrElse(ParseFailure(_1))
+    decoded.map(Success(_)).getOrElse(ParseFailure(decoded.toString))
   }
 
   def getMedia(
@@ -98,14 +99,18 @@ case class ApiClient(val baseUrl: String, val userAgent: String) {
       "output" -> "json",
       "tech" -> tech
     )
-
+    Thread.sleep(500)
     val response = quickRequest
       .get(uri"$baseUrl/media/validation/v2?$query")
       .header("User-Agent", userAgent)
       .header("Content-Type", "application/json")
+      .header("apollo-require-preflight", "true")
       .send()
 
     if (!response.code.isSuccess) {
+      logger.warn(
+        s"getMedia(${mediaId}, ${tech}) HTTP ${response.code.code}: ${response.body.take(200)}"
+      )
       return FetchFailure(s"Request failed with ${response.code.code}")
     }
 
@@ -114,7 +119,7 @@ case class ApiClient(val baseUrl: String, val userAgent: String) {
     val decoded =
       (body).validate[MediaStream]
 
-    decoded.map(Success(_)).getOrElse(ParseFailure(_1))
+    decoded.map(Success(_)).getOrElse(ParseFailure(decoded.toString))
   }
 
 }
